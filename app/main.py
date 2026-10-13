@@ -194,16 +194,22 @@ def main() -> int:
     library: SteamLibrary | None = None
     last_sync_ts = 0.0
     if cfg.steam_api_key and cfg.steam_id:
+        # 客户端先建好，且不随同步失败回收：否则一次失败就永远不再重试。
+        library_client = SteamLibraryClient(cfg.steam_api_key, cfg.steam_id)
         try:
-            library_client = SteamLibraryClient(cfg.steam_api_key, cfg.steam_id)
             library = library_client.sync()
-            last_sync_ts = time.time()
+            # get_wishlist() 抓取失败时不抛异常，只返回空字典，
+            # 所以这里用「愿望清单是否为空」判定成败：为空就不刷新 last_sync_ts，
+            # 下一轮立刻重试，而不是白等 sync_library_hours（默认 24 小时）。
+            if library.wishlist:
+                last_sync_ts = time.time()
+            else:
+                log.warning("愿望清单为空（可能是临时抓取失败），下一轮会重试")
             log.info("已同步：拥有 %d 个游戏，愿望清单 %d 个，待监控 %d 个",
                      len(library.owned_appids), len(library.wishlist),
                      len(set(library.wishlist) - library.owned_appids))
         except Exception as e:
-            log.warning("首次同步库/愿望清单失败，仅用手动配置: %s", e)
-            library_client = None
+            log.warning("首次同步库/愿望清单失败，仅用手动配置，下一轮会重试: %s", e)
 
     watch = build_watch_list(cfg, library)
 
@@ -219,12 +225,18 @@ def main() -> int:
         while not stop:
             if library_client and (time.time() - last_sync_ts) > cfg.sync_library_hours * 3600:
                 try:
-                    library = library_client.sync()
-                    watch = build_watch_list(cfg, library)
-                    last_sync_ts = time.time()
-                    log.info("重新同步完成：待监控 %d 个游戏", len(watch))
+                    fresh = library_client.sync()
+                    if fresh.wishlist:
+                        library = fresh
+                        watch = build_watch_list(cfg, library)
+                        last_sync_ts = time.time()
+                        log.info("重新同步完成：待监控 %d 个游戏", len(watch))
+                    else:
+                        # 抓取失败时沿用上一份列表，别把已监控的游戏丢掉。
+                        log.warning("愿望清单抓取为空，沿用上一份列表（待监控 %d 个），下一轮重试",
+                                    len(watch))
                 except Exception as e:
-                    log.warning("同步库/愿望清单失败（沿用旧列表）: %s", e)
+                    log.warning("同步库/愿望清单失败（沿用旧列表，下一轮重试）: %s", e)
 
             try:
                 check_once(cfg, steam, notifier, state, watch, itad=itad)

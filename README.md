@@ -117,7 +117,9 @@ docker compose restart steam-price-monitor
 | 日志显示 `无价格信息` | 该游戏国区未上架或未发售 |
 | 容器反复重启，日志 `PermissionError: [Errno 13] Permission denied: 'app/app/__init__.py'` | 构建上下文里的文件权限是 `000`（从 Windows 打包 zip 再解压到 NAS 上很常见）。Dockerfile 里的 `chmod -R a+rX /app` 就是为这种情况准备的，请勿删除 |
 | 日志偶发 `The handshake operation timed out` / `The read operation timed out` | 国内访问 Steam 偶发超时，程序自带重试（价格 2 次、库同步 3 次退避）。偶发一条不影响监控，连续超时才会记 warning |
+| 某一轮很慢，日志连续出现 `请求 appdetails 失败 appid=xxx 第N次` | Steam 对同一 IP 的 `appdetails` 有短时限流。失败的游戏最多重试 3 次（每次 20 秒超时 + 3/6 秒退避），单个游戏最长约 70 秒。该游戏本轮跳过、保留上次记录，不会误报，下一轮自动恢复 |
 | 日志 `拉取已拥有游戏失败（不影响愿望清单同步）` | 解析 steamid 失败（填自定义 ID 时需要 `api.steampowered.com`）。愿望清单照样会爬，只是无法排除已拥有的游戏 |
+| 日志 `愿望清单为空（可能是临时抓取失败），下一轮会重试` | 愿望清单抓取失败时不会丢掉已监控的游戏：程序**不刷新同步时间戳**，下一轮（默认 6 小时）立刻重试；若手上已有旧列表则继续沿用，而不是退回只剩手动配置的那几个 |
 
 ## 安全说明
 
