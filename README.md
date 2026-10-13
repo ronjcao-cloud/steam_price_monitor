@@ -1,274 +1,165 @@
-# Steam Price Monitor - Steam价格监控插件
+# Steam Price Monitor（独立容器版）
 
-## 访问统计
-![访问统计](https://visitor-badge.laobi.icu/badge?page_id=Sakura520222.steam_price_monitor)
+轻量 Steam 国区价格监控，跑在飞牛 NAS 的 Docker 里。降价 / 跌破目标价 / 转免费时，
+通过**飞书**或**钉钉**自定义机器人推消息（可同时推两个）。
 
-## 简介
+剥离自 [Sakura520222/steam_price_monitor](https://github.com/Sakura520222/steam_price_monitor)
+（原项目是 AstrBot 插件，无法独立运行），保留国区价格查询的核心逻辑，去掉聊天框架、
+大模型翻译、matplotlib 图表等依赖。
 
-Steam Price Monitor 是一款专业的Steam游戏价格监控插件，基于AstrBot框架开发。支持查询国区价格、史低信息、多区服价格对比和自动价格监控功能。支持自动识别游戏名或Steam商店链接，为Steam玩家提供全方位的价格信息服务。
+## 功能
 
-## 主要特性
+- 每 N 小时查一次 Steam 国区价格（默认 6 小时）
+- 降价 / 跌破目标价 / 转免费 → 推送；涨价默认不打扰（可配置）
+- 可选：自动监控 Steam **愿望清单**里尚未拥有的游戏
+- 可选：消息里附带 ITAD **国区史低**参考价
+- 状态持久化在 `data/state.json`，容器重启不丢基线
+- **纯出站**：不监听任何端口，无数据库、无反向代理需求
 
-### 🔍 智能搜索功能
-- **多语言支持**：支持中文、英文游戏名搜索
-- **智能翻译**：自动翻译中文游戏名为Steam官方英文名
-- **链接识别**：自动识别Steam商店链接并提取AppID
-- **多源搜索**：结合ITAD API和Steam官方API进行搜索
+## 快速开始（NAS 上）
 
-### 💰 价格查询功能
-- **国区价格**：查询中国区实时价格和折扣信息
-- **史低信息**：获取游戏历史最低价格和折扣记录
-- **多区对比**：支持UA、US、JP、KR、RU、CN、TR等区服价格对比
-- **汇率转换**：自动将外币价格转换为人民币进行对比
+```bash
+# 1. 准备配置
+cd Steam-Pricing/config
+cp config.yaml.example config.yaml
+vi config.yaml          # 填飞书和/或钉钉，改 games 列表
 
-### 🔔 价格监控功能
-- **自动监控**：定时检查订阅游戏的价格变动
-- **智能通知**：价格变动时自动发送详细通知
-- **多状态提醒**：支持价格上涨、下跌、免费等状态提醒
-- **个性化订阅**：每个用户可独立管理自己的监控列表
+# 2. 构建并启动
+cd ..
+docker compose up -d --build
 
-### ⚙️ 配置管理
-- **灵活配置**：支持启用/禁用价格监控功能
-- **自定义间隔**：可设置价格监控检查间隔（30-60分钟）
-- **API密钥管理**：支持ITAD API和Steam Web API配置
-- **数据持久化**：自动保存监控列表和配置信息
-
-## 快速开始
-
-### 1. 安装插件
-
-将插件目录放入 AstrBot 的插件目录：
-```
-AstrBot/data/plugins/steam_price_monitor/
+# 3. 看日志
+docker compose logs -f steam-price-monitor
 ```
 
-### 2. 配置API密钥
+**首次运行只记录基线价，不会推送**——这是正常的，之后有变动才推。想立刻验证通道通不通，
+见下面「验证推送通道」。
 
-在AstrBot后台管理界面中配置以下API密钥：
+### 飞牛 NAS 图形界面做法
 
-- **ITAD_API_KEY**：在 [isthereanydeal.com/apps/](https://isthereanydeal.com/apps/) 获取
-- **STEAMWEBAPI_KEY**：在 [steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey) 获取
+不想敲命令的话：**Docker → Compose → 新建项目**，把 `docker-compose.yml` 内容粘进去、
+项目路径选到本目录即可。首次创建会触发构建。
 
-### 3. 配置插件选项
+> 国内网络提示：拉 `python:3.12-slim` 或装 PyPI 依赖慢/失败时，改
+> `docker-compose.yml` 里 `build.args` 两行注释中的镜像源（daocloud 基础镜像 + 清华 PyPI）。
 
-- **STEAM_COMPARE_REGION**：选择价格对比区（NONE/UA/US/JP/KR/RU/CN/TR）
-- **ENABLE_PRICE_MONITOR**：启用/禁用价格监控功能
-- **PRICE_MONITOR_INTERVAL**：价格监控检查间隔（分钟）
+## 一次性准备：推送机器人
 
-## 使用指南
+### 飞书
 
-### 基础查询命令
+1. 建一个只有你自己的群（或拉到已有群）
+2. 群设置 → 群机器人 → 添加机器人 → **自定义机器人**
+3. 安全设置建议选**签名校验**，记下 secret
+4. 复制 webhook（形如 `https://open.feishu.cn/open-apis/bot/v2/hook/xxxx`）
+5. 填到 `config/config.yaml` 的 `feishu:` 段
 
-#### 1. 查询游戏价格和史低信息
-```
-/史低 <游戏名或Steam商店链接>
-```
-**别名：** `/价格`
+### 钉钉
 
-**示例：**
-- `/史低 Cyberpunk 2077`
-- `/史低 https://store.steampowered.com/app/1091500`
-- `/史低 赛博朋克2077`
+1. 群设置 → 智能群助手 → 添加机器人 → **自定义（通过 Webhook 接入）**
+2. 安全设置三选一，**推荐「加签」**：
+   - **加签** → 把密钥填到 `dingtalk.secret`
+   - **自定义关键词** → 把关键词填到 `dingtalk.keyword`，程序会自动加到每条消息开头
+     （不填会被钉钉以 `errcode 310000` 拒收）
+   - IP 地址段 → 不用管（本程序纯出站，但 NAS 的公网出口 IP 会变，不推荐）
+3. 复制 webhook 里的 `access_token=xxxx` 那段，填到 `dingtalk.access_token`
 
-**功能：**
-- 查询游戏当前价格和折扣信息
-- 显示历史最低价格记录
-- 支持多区服价格对比
-- 自动汇率转换
+两个通道都填就会**同时推**；只填一个就只推那一个。一个都不填会启动报错。
 
-#### 2. 搜索Steam游戏
-```
-/查找游戏 <游戏名>
-```
-**功能：**
-- 搜索Steam游戏库
-- 返回匹配的游戏列表
-- 支持模糊搜索
+## 验证推送通道
 
-### 价格监控命令
-
-#### 1. 订阅价格监控
-```
-/价格监控 <游戏名或AppID>
-```
-**别名：** `/订阅价格`、`/监控价格`
-
-**示例：**
-- `/价格监控 Cyberpunk 2077`
-- `/价格监控 1091500`
-- `/价格监控 千恋万花`
-
-**功能：**
-- 订阅游戏价格监控
-- 支持中文游戏名自动翻译
-- 订阅成功后开始定期监控
-
-#### 2. 取消价格监控
-```
-/取消监控 <游戏名或AppID>
-```
-**别名：** `/取消订阅`、`/停止监控`
-
-**示例：**
-- `/取消监控 Cyberpunk 2077`
-- `/取消监控 1091500`
-
-**功能：**
-- 取消对指定游戏的价格监控
-- 支持通过游戏名或AppID取消
-
-#### 3. 查看监控列表
-```
-/监控列表
-```
-**功能：**
-- 查看当前用户订阅的所有监控游戏
-- 显示游戏名称和当前记录的价格
-
-### 价格变动通知
-
-当监控的游戏价格发生变化时，插件会自动发送通知：
-
-#### 通知类型
-- 🎉 **游戏免费**：游戏变为免费时通知
-- ⬆️ **价格上涨**：价格上涨时通知
-- ⬇️ **价格下跌**：价格下跌时通知
-
-#### 通知内容
-- 游戏名称和价格变动信息
-- 变动前后价格对比
-- 当前折扣信息
-- Steam商店链接
-
-#### 通知示例
-```
-⬇️ 游戏《Cyberpunk 2077》价格下跌：¥-149.00
-变动前价格：¥298.00
-当前价格：¥149.00
-原价：¥298.00
-折扣：50%
-购买链接：https://store.steampowered.com/app/1091500
+```bash
+docker compose exec steam-price-monitor python -c "
+from app.config import Config
+from app.notifier import build_notifier
+c = Config.load('/config/config.yaml')
+n = build_notifier(c)
+print('通道:', type(n).__name__)
+print('发送结果:', n.send_text('✅ Steam 价格监控已上线'))
+"
 ```
 
-## 技术架构
+返回 `True` 且群里收到消息就说明通了。
 
-### API集成
-- **ITAD API**：用于获取游戏信息和史低数据
-- **Steam Web API**：用于获取实时价格信息
-- **Steam商店API**：用于游戏搜索和价格查询
+## 改关注列表
 
-### 数据处理
-- **异步处理**：使用asyncio进行异步API调用
-- **定时任务**：基于APScheduler实现定时监控
-- **数据存储**：JSON格式存储监控配置
-- **线程安全**：使用锁机制保证数据一致性
+编辑 `config/config.yaml`，然后：
 
-### 错误处理
-- **重试机制**：API调用失败时自动重试
-- **降级策略**：主API失败时使用备用API
-- **异常捕获**：完善的异常处理和日志记录
-
-## 配置说明
-
-### 配置文件结构
-
-插件配置保存在 `_conf_schema.json` 中，包含以下选项：
-
-```json
-{
-  "ITAD_API_KEY": "ITAD API密钥",
-  "STEAMWEBAPI_KEY": "Steam Web API密钥", 
-  "STEAM_COMPARE_REGION": "价格对比区（NONE/UA/US/JP/KR/RU/CN/TR）",
-  "PRICE_MONITOR_INTERVAL": "监控间隔（分钟）",
-  "ENABLE_PRICE_MONITOR": "启用价格监控"
-}
+```bash
+docker compose restart steam-price-monitor
 ```
 
-### 数据文件结构
+游戏 appid 从商店链接取：`https://store.steampowered.com/app/1091500/` → `1091500`。
 
-监控列表保存在 `data/steam_price_monitor/price_monitor_list.json`：
+## 配置项速查
 
-```json
-{
-  "user_id": {
-    "appid": {
-      "game_name": "游戏名称",
-      "last_price": 149.00,
-      "last_check": "2024-01-01 12:00:00"
-    }
-  }
-}
+| 配置 | 说明 |
+| --- | --- |
+| `feishu.webhook_url` / `secret` | 飞书机器人；也可用环境变量 `FEISHU_WEBHOOK_URL` / `FEISHU_SECRET` |
+| `dingtalk.access_token` / `secret` / `keyword` | 钉钉机器人；也可用 `DINGTALK_TOKEN` / `DINGTALK_SECRET` / `DINGTALK_KEYWORD` |
+| `monitor.interval_minutes` | 轮询间隔（分钟），默认 360 |
+| `monitor.notify_on_rise` | 涨价是否通知，默认 `false` |
+| `steam.api_key` / `id` / `sync_hours` | 填了就自动监控愿望清单；`id` 可填 17 位数字或自定义 ID |
+| `itad.api_key` | 填了消息里多一行「国区史低」 |
+| `games[]` | 手动关注列表，`target_price` 是心理价位 |
+
+环境变量优先级高于配置文件，适合把密钥放在 NAS 的环境变量里而不落盘。
+
+## 排错
+
+| 现象 | 原因 / 处理 |
+| --- | --- |
+| 启动就报「至少配置一个推送通道」 | `config.yaml` 里飞书和钉钉都没填 |
+| 钉钉返回 `errcode 310000` | 安全设置选了关键词但没配 `keyword`，或关键词不在消息里 |
+| 钉钉返回 `errcode 310000` 且提示 sign | 加签密钥不对；确认 `dingtalk.secret` 填的是「加签」的密钥 |
+| 飞书返回 `code 19021` | 签名校验开了但 `feishu.secret` 没填或填错 |
+| 一直不推送 | 首次只记基线；之后只在**降价**、**跌破目标价**、**刚变成免费**这三种情况推。价格没变就不推 |
+| 免费游戏会不会每轮都推 | 不会。「转为免费」只在「原本不免费 → 变成免费」那一次推。已经免费的游戏后续轮次静默，否则每 6 小时骚扰一次 |
+| 日志显示 `无价格信息` | 该游戏国区未上架或未发售 |
+| 容器反复重启，日志 `PermissionError: [Errno 13] Permission denied: 'app/app/__init__.py'` | 构建上下文里的文件权限是 `000`（从 Windows 打包 zip 再解压到 NAS 上很常见）。Dockerfile 里的 `chmod -R a+rX /app` 就是为这种情况准备的，请勿删除 |
+| 日志偶发 `The handshake operation timed out` / `The read operation timed out` | 国内访问 Steam 偶发超时，程序自带重试（价格 2 次、库同步 3 次退避）。偶发一条不影响监控，连续超时才会记 warning |
+| 日志 `拉取已拥有游戏失败（不影响愿望清单同步）` | 解析 steamid 失败（填自定义 ID 时需要 `api.steampowered.com`）。愿望清单照样会爬，只是无法排除已拥有的游戏 |
+
+## 安全说明
+
+- 程序**只走出站**：请求 Steam 商店 API、ITAD、飞书/钉钉 webhook，不监听任何端口
+- NAS 的 IPv6 防火墙、Tailscale/WireGuard 等**入站规则完全不用动**
+- webhook 地址 / secret 等价于群聊发言权限，不要提交到 git、不要外发
+- `config/config.yaml` 已在 `.gitignore` 里排除
+- 容器以非 root 用户（uid 1000）运行
+
+## 目录结构
+
+```
+Steam-Pricing/
+├── app/
+│   ├── main.py            # 主循环、消息组装、状态持久化
+│   ├── config.py          # 配置加载与校验
+│   ├── steam_client.py    # Steam 国区价格 API
+│   ├── steam_library.py   # 愿望清单 / 已拥有游戏同步（可选）
+│   ├── itad_client.py     # ITAD 史低查询（可选）
+│   └── notifier.py        # 飞书 / 钉钉 webhook 推送
+├── config/
+│   ├── config.yaml.example
+│   └── config.yaml        # 你自己填（不入库）
+├── data/
+│   └── state.json         # 运行时自动生成
+├── reference/             # 原 AstrBot 插件的文件，仅供对照，不参与运行
+├── Dockerfile
+└── docker-compose.yml
 ```
 
-## 故障排除
+## 本机部署记录（飞牛 NAS）
 
-### 常见问题
+| 项 | 值 |
+| --- | --- |
+| 宿主机目录 | `/vol1/1000/Docker/steam-price-monitor` |
+| Compose 项目名 | `steam-price-monitor` |
+| 容器 | `steam-price-monitor`，`restart: unless-stopped` |
+| 镜像 | `steam-price-monitor:latest` |
+| 状态文件 | `data/state.json`（卷挂载，重建容器不丢基线） |
+| 推送通道 | 飞书（已实际验证送达） |
 
-#### Q: 为什么收不到价格变动通知？
-A: 请检查以下设置：
-- 插件是否已正确配置API密钥
-- 网络连接是否正常
-- 监控间隔设置是否合理
-- 游戏是否在中国区有价格信息
+**改完 `app/` 下的代码要重建镜像才生效**：光点「重新部署」只会复用旧镜像层。
+正确顺序是先删容器、再删旧镜像、再构建，否则跑的还是老代码。
 
-#### Q: 游戏名搜索失败怎么办？
-A: 尝试以下方法：
-- 使用Steam商店链接直接查询
-- 检查游戏名拼写是否正确
-- 确保AstrBot设置了默认大模型用于翻译
-
-#### Q: 如何完全禁用价格监控功能？
-A: 在插件配置中将 `ENABLE_PRICE_MONITOR` 设置为 false
-
-#### Q: 汇率转换不准确怎么办？
-A: 编辑 `price_convert.py` 文件更新汇率数据
-
-### 错误代码说明
-
-- **API密钥错误**：检查ITAD和Steam API密钥配置
-- **网络连接失败**：检查网络连接和防火墙设置
-- **游戏未找到**：确认游戏名或链接正确，游戏在中国区可用
-- **翻译失败**：检查AstrBot大模型配置
-
-## 版本信息
-
-- **当前版本**：2.0.0
-- **框架要求**：AstrBot
-- **Python版本**：3.8+
-- **依赖包**：httpx, beautifulsoup4, apscheduler
-
-### 更新日志
-
-#### v2.0.0 (最新)
-- 新增价格监控功能
-- 支持多用户独立监控列表
-- 优化搜索算法和错误处理
-- 改进通知格式和内容
-
-#### v1.0.0
-- 基础价格查询功能
-- 史低信息查询
-- 多区服价格对比
-- 汇率转换功能
-
-## 开发者信息
-
-- **作者**：车厘子小樱
-- **GitHub**：https://github.com/Sakura520222
-- **插件仓库**：https://github.com/Sakura520222/steam_price_monitor
-
-## 支持与反馈
-
-如果您在使用过程中遇到问题或有改进建议，欢迎：
-
-1. 在GitHub仓库提交Issue
-2. 加入QQ群：922321912 进行交流
-3. 查看详细的使用说明文档
-
-## 许可证
-
-本项目采用MIT许可证，详情请查看LICENSE文件。
-
----
-
-**温馨提示**：请合理使用API调用，遵守Steam和ITAD的服务条款。价格信息仅供参考，实际价格以Steam商店为准。
+当前每轮监控 15 个游戏 = 手动 2 个 + 愿望清单 14 个（《艾尔登法环》两边都有，去重后 15）。

@@ -1,0 +1,26 @@
+services:
+  steam-price-monitor:
+    build:
+      context: .
+      args:
+        # 国内网络构建如果拉不动 Docker Hub，改用镜像加速地址：
+        # BASE_IMAGE: docker.m.daocloud.io/library/python:3.12-slim
+        BASE_IMAGE: python:3.12-slim
+        # 国内网络装依赖慢，可换成清华源：
+        # PIP_INDEX: https://pypi.tuna.tsinghua.edu.cn/simple
+        PIP_INDEX: https://pypi.org/simple
+    image: steam-price-monitor:latest
+    container_name: steam-price-monitor
+    restart: unless-stopped
+    # 配置文件和状态目录挂载到 NAS 上，重启不丢
+    volumes:
+      - ./config:/config:ro
+      - ./data:/data
+    environment:
+      - TZ=Asia/Shanghai
+      # webhook / token 也可以不走配置文件，直接在这里注入（二选一，环境变量优先）
+      # - FEISHU_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/xxx
+      # - FEISHU_SECRET=xxx
+      # - DINGTALK_TOKEN=xxx
+      # - DINGTALK_SECRET=xxx
+      # - DINGTALK_KEYWORD=史低

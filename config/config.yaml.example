@@ -1,0 +1,59 @@
+# ===== 推送通道（飞书 / 钉钉 至少配一个，两个都配就同时推）=====
+
+# --- 飞书自定义机器人 ---
+# 飞书群里：群设置 → 群机器人 → 添加机器人 → 自定义机器人，拿到 webhook 地址填到下面
+# 如果机器人开了"签名校验"，把 secret 也填上；没开就留空
+feishu:
+  webhook_url: "https://open.feishu.cn/open-apis/bot/v2/hook/在此填入你的hook"
+  secret: ""   # 可选
+
+# --- 钉钉自定义机器人 ---
+# 钉钉群里：群设置 → 智能群助手 → 添加机器人 → 自定义（通过 Webhook 接入）
+# 拿到形如 https://oapi.dingtalk.com/robot/send?access_token=xxxx 的地址，
+# 只把 access_token 那段填到 access_token 即可（也可以整条填到 webhook_url）。
+#
+# 安全设置三选一，对应下面怎么填：
+#   加签        → 填 secret（推荐）
+#   IP 地址段   → 不用填
+#   自定义关键词 → 填 keyword，程序会自动把它加到每条消息开头，
+#                 否则钉钉会以 errcode 310000 拒收
+dingtalk:
+  access_token: ""
+  secret: ""       # 选"加签"时必填
+  keyword: ""      # 选"自定义关键词"时必填
+  # webhook_url: "https://oapi.dingtalk.com/robot/send?access_token=xxx"   # 整条填这里也行
+
+# ===== 监控行为 =====
+monitor:
+  interval_minutes: 360     # 轮询间隔（分钟）。6 小时够了，Steam 价格不会分钟级变
+  notify_on_rise: false    # 涨价要不要通知？一般 false（只通知降价/到价/免费）
+
+# ===== Steam 愿望清单自动同步（可选）=====
+# 填了 api_key + id 之后，程序除了下面的 games，还会自动监控你 Steam 愿望清单里
+# 尚未拥有的游戏。steam id 可以填 17 位数字，也可以直接填自定义 ID（如 eskimojie）。
+steam:
+  api_key: ""              # https://steamcommunity.com/dev/apikey
+  id: ""
+  sync_hours: 24
+
+# ===== ITAD 历史最低价（可选）=====
+# 填了之后消息里会多一行"国区史低"
+itad:
+  api_key: ""              # https://isthereanydeal.com/apps/my/
+
+# ===== 关注的游戏列表 =====
+# appid 从 Steam 商店链接里找：https://store.steampowered.com/app/1091500/  →  appid=1091500
+# name 可以留空，程序会自动从 Steam 接口取；填了则以你填的为准
+# target_price 是你的心理价位，跌到这个价位会特别提醒；不需要就删掉这一行
+games:
+  - appid: 1091500
+    name: "赛博朋克2077"
+    target_price: 149.0
+
+  - appid: 271590
+    name: "GTA5"
+    target_price: 50.0
+
+  - appid: 1245620
+    name: "艾尔登法环"
+    target_price: 200.0
